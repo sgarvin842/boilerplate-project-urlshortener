@@ -51,7 +51,7 @@ app.get('/api/shorturl/:id', async function(req, res, next) {
 const validateUrl = (url) => new Promise((resolve, reject) => {
   try{
     wellFormedUrl = new URL(url);
-    dnsLookup(wellFormedUrl).then((result) => resolve(wellFormedUrl)).catch(err =>{ if(err){console.log("rejected"); reject("Invalid Url")}});
+    dnsLookup(wellFormedUrl).then((result) => resolve(wellFormedUrl)).catch(err =>{ if(err){reject("Invalid Url")}});
   }catch(err){
     reject("Invalid Url");
   }
@@ -62,19 +62,15 @@ app.post('/api/shorturl', async function(req, res, next) {
   let valid = false;
   validateUrl(req.body.url)
   .then((url) => {
-    
-    console.log("1");
     const urlModel = new ShortUrlModel({name: url})
     buildQuery(urlModel).then((query) => {
       find(query)
       .then((resultSet) => {
         if(resultSet.length !== 0){
           resultSet = resultSet[0];
-          console.log(resultSet);
           res.json({ original_url: resultSet.name, short_url: resultSet.newUrl });
         }else{
           save(urlModel).then((resultSet) => {
-            console.log("3");
             res.json({ original_url: resultSet.name, short_url: resultSet.newUrl });
           }).catch();
         }
@@ -123,10 +119,7 @@ const buildQuery = (urlModel) => new Promise((resolve, reject) => {
   on the query passed
 */
 const find = (query) => new Promise(async (resolve, reject) => {
-  console.log("query");
-  console.log(query);
   var poo = await ShortUrlModel.find(query).exec();
-  console.log(poo);
   resolve(poo);
 });
 
