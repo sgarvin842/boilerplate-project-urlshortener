@@ -8,7 +8,7 @@ const bodyParser = require('body-parser');
 
 const mongoose = require('mongoose');
 const res = require('express/lib/response');
-const uri = "mongodb+srv://admin:wbhvEBCZaREYaD3L@cluster0.tzqsekk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const uri = "mongodb+srv://admin:wbhvEBCZaREYaD3L@cluster0.tzqsekk.mongodb.net/url_shortener?retryWrites=true&w=majority&appName=Cluster0";
 const clientOptions = { serverApi: { version: '1', strict: true, deprecationErrors: true } };
 
 // Define a schema
