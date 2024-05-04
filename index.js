@@ -7,6 +7,7 @@ const dns = require('dns');
 const bodyParser = require('body-parser');
 
 const mongoose = require('mongoose');
+const res = require('express/lib/response');
 const uri = "mongodb+srv://admin:wbhvEBCZaREYaD3L@cluster0.tzqsekk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 const clientOptions = { serverApi: { version: '1', strict: true, deprecationErrors: true } };
 
@@ -32,74 +33,81 @@ app.use('/public', express.static(`${process.cwd()}/public`));
 
 app.use(bodyParser.urlencoded({ extended: false }));
 
+
 app.get('/', function(req, res) {
   res.sendFile(process.cwd() + '/views/index.html');
 });
 
-app.get('/api/shorturl/:id', async function(req, res) {
+app.get('/api/shorturl/:id', async function(req, res, next) {
   let urlModel = new ShortUrlModel({newUrl: req.params.id});
-  let query = buildQuery(urlModel)
+
+    buildQuery(urlModel).then(query => {
+      find(query)
+        .then(resultSet => res.redirect(resultSet[0].name))
+        .catch(err => res.json({ error: "No short URL found for the given input" }));
+    });
+});
+
+const validateUrl = (url) => new Promise((resolve, reject) => {
   try{
-    let resultSet = await find(query);
-    res.redirect(resultSet[0].name);
+    wellFormedUrl = new URL(url);
+    dnsLookup(wellFormedUrl).then((result) => resolve(wellFormedUrl)).catch(err =>{ if(err){console.log("rejected"); reject("Invalid Url")}});
   }catch(err){
-    res.json({ error: "No short URL found for the given input" });
+    reject("Invalid Url");
   }
 });
 
 // Your first API endpoint
-app.post('/api/shorturl', async function(req, res) {
-  let url = "";
-
-  try{
-    url = new URL(req.body.url);
-  }catch(err){
-    res.json({ error: "Invalid Url" });
-    return;
-  }
-
-  try{
+app.post('/api/shorturl', async function(req, res, next) {
+  let valid = false;
+  validateUrl(req.body.url)
+  .then((url) => {
+    
+    console.log("1");
     const urlModel = new ShortUrlModel({name: url})
-    let query = buildQuery(urlModel);
-    let resultSet = await find(query);
-
-    await dnsLookup(url);
-    if(resultSet === 0){
-      resultSet = await save(urlModel);
-    }else{
-      resultSet = resultSet[0];
-    }
-    res.json({ original_url: resultSet.name, short_url: resultSet.newUrl });
-  }catch(err){
-    res.json({ error: err })
-  }
+    buildQuery(urlModel).then((query) => {
+      find(query)
+      .then((resultSet) => {
+        if(resultSet.length !== 0){
+          resultSet = resultSet[0];
+          console.log(resultSet);
+          res.json({ original_url: resultSet.name, short_url: resultSet.newUrl });
+        }else{
+          save(urlModel).then((resultSet) => {
+            console.log("3");
+            res.json({ original_url: resultSet.name, short_url: resultSet.newUrl });
+          }).catch();
+        }
+      }).catch();
+    })
+  })
+  .catch(function(err) { 
+    res.json({ error: err }); 
+  });
 });
 
 app.listen(port, function() {
   console.log(`Listening on port ${port}`);
 });
 
-async function dnsLookup(url){
+const dnsLookup = (url) => new Promise((resolve, reject) => {
   let hostname = url.hostname;
-  if(hostname == undefined){
-    throw(err);
-  }
-  dns.lookup(hostname, (err) => {
+
+  dns.lookup(hostname, (err, address, family) => {
     if(err){
-      throw(err);
+      reject('Invalid Url');
+      return;
     }
-    if(hostname = ""){  
-      throw(err);
-    }
-  });
-}
+    resolve(address);
+  }); 
+});
 
 /*
   Builds the query to be used when looking up
   posted values in the db. allows us to have optional
   search terms and flex the find() function.
 */
-function buildQuery(urlModel){
+const buildQuery = (urlModel) => new Promise((resolve, reject) => {
   let query = {};
   if(urlModel.name){
     query.name = urlModel.name;
@@ -107,21 +115,20 @@ function buildQuery(urlModel){
   if(urlModel.newUrl){
     query.newUrl = urlModel.newUrl;
   }
-  return query;
-}
+  resolve(query);
+});
 
 /*
   A simple lookup to see if a result exists in our db based
   on the query passed
 */
-async function find(query){
-  try{
-    let resultSet = await ShortUrlModel.find(query).exec();
-    return resultSet;
-  }catch(err){
-    throw("Find error");
-  }
-}
+const find = (query) => new Promise(async (resolve, reject) => {
+  console.log("query");
+  console.log(query);
+  var poo = await ShortUrlModel.find(query).exec();
+  console.log(poo);
+  resolve(poo);
+});
 
 /*
   Save a newly created url model in our db.
@@ -130,20 +137,20 @@ async function find(query){
   to receive a multitude of concurrent request, this should be
   sufficiently correct.
 */
-async function save(urlModel){
+const save = (urlModel) => new Promise(async (resolve, reject) => {
+  urlModel.newUrl = await ShortUrlModel.estimatedDocumentCount() + 1;
   try{
-    urlModel.newUrl = await ShortUrlModel.estimatedDocumentCount() + 1;
     let resultSet = await urlModel.save();
-    return resultSet;
+    resolve(resultSet);
   }catch(err){
-    throw("Save error");
+    reject(err);
   }
-}
+});
 
 function run() {
   try {
     mongoose.connect(uri);
   }catch(err){
-    throw("Connection error");
+    res.send("Connection error");
   }
 }
